@@ -1,0 +1,31 @@
+models:
+  - name: qwen2.5-0.5b-instruct
+    path: Qwen/Qwen2.5-0.5B-Instruct
+    chat_template: true
+    dtype: bfloat16
+    tensor_parallel_size: 1
+    max_model_len: 2048
+    max_num_seqs: 256
+    max_num_batched_tokens: 32768
+    gpu_memory_utilization: 0.8
+
+experiment:
+  name: name_only
+  group_size: 4
+  num_groups: 512
+  permutations_per_group: 2
+  generations_per_prompt: 1
+  seed: 42
+
+data:
+  source: huggingface
+  dataset: FrinzTheCoder/MissingPeople
+  split: train
+  cache_dir: ../data/raw/huggingface
+
+generation:
+  temperature: 0.0
+  max_tokens: 8
+  seed: 42
+
+output_dir: ../outputs/smoke

@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.egg-info/
+data/
+outputs/
+.run_state/
+slurm-*.out
+analysis/.cache/
+analysis/figures/

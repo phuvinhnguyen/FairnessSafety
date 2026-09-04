@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fairness-safety"
+version = "0.1.0"
+description = "Configuration-driven demographic-bias experiments for LLM rescue decisions"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["PyYAML>=6.0"]
+
+[project.optional-dependencies]
+data = ["datasets>=3.0"]
+inference = ["vllm==0.10.2", "transformers==4.56.2"]
+analysis = ["ipykernel>=6.29", "matplotlib>=3.9", "nbclient>=0.10", "nbformat>=5.10", "pandas>=2.2", "scipy>=1.13", "seaborn>=0.13"]
+
+[project.scripts]
+fairness-safety = "fairness_safety.runner:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

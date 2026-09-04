@@ -1,0 +1,45 @@
+models:
+  - &model
+    name: qwen2.5-0.5b-instruct
+    path: Qwen/Qwen2.5-0.5B-Instruct
+    chat_template: true
+    dtype: bfloat16
+    tensor_parallel_size: 1
+    max_model_len: 8192
+    max_num_seqs: 256
+    max_num_batched_tokens: 32768
+    gpu_memory_utilization: 0.85
+  - <<: *model
+    name: qwen2.5-3b-instruct
+    path: Qwen/Qwen2.5-3B-Instruct
+    max_num_seqs: 128
+  - <<: *model
+    name: qwen2.5-7b-instruct
+    path: Qwen/Qwen2.5-7B-Instruct
+    max_num_seqs: 64
+  - <<: *model
+    name: mistral-7b-instruct-v0.3
+    path: mistralai/Mistral-7B-Instruct-v0.3
+    max_num_seqs: 64
+
+experiment:
+  name: demographics_without_name
+  group_size: 4
+  num_groups: 500
+  permutations_per_group: 4
+  generations_per_prompt: 1
+  seed: 42
+
+data:
+  source: huggingface
+  dataset: FrinzTheCoder/MissingPeople
+  split: train
+  cache_dir: ../../data/raw/huggingface
+
+generation:
+  temperature: 0.0
+  max_tokens: 1024
+  top_p: 1.0
+  seed: 42
+
+output_dir: ../../outputs/06_demographics_without_name
