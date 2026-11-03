@@ -1,0 +1,56 @@
+{
+ "Qwen/Qwen2.5-0.5B-Instruct": {
+  "arith": {
+   "prompt": "Question: Tom has 3 apples and buys 4 more, then gives 2 away. How many apples does he have? Let's think step by step.\nAnswer:",
+   "continuation": " Step 1: Determine the initial number of apples Tom had.\nTom starts with 3 apples.\n\nStep 2: Calculate the total number of apples Tom bought.\nTom buys 4 more apples, so we add these to his initial amount:\n3 + 4 = 7\n\nStep 3:"
+  },
+  "logic": {
+   "prompt": "All birds can fly. A penguin is a bird. Does a penguin fly according to these premises? Reason step by step.\nAnswer:",
+   "continuation": " To determine whether a penguin flies based on the given premises, we need to carefully analyze each premise and see if it logically leads to the conclusion that \"a penguin flies.\"\n\n1. **Premise 1:** Birds can fly.\n   - This premise states that all birds are capable of flying.\n\n2. **Premise "
+  },
+  "seq": {
+   "prompt": "Continue the pattern and explain: 2, 4, 6, 8, ... The next number is",
+   "continuation": " ____\nA. 10  \nB. 12  \nC. 14  \nD. 16\n\nTo determine the next number in the sequence 2, 4, 6, 8, ..., we need to identify the pattern governing the sequence. Let's examine the differences between consecutive terms:\n\n- The difference between the second term"
+  },
+  "story": {
+   "prompt": "Anna put her keys in the drawer, then went to the garden. Bob moved the keys to the table. Where will Anna look for her keys first? Think carefully.\nAnswer:",
+   "continuation": " To determine where Anna will look for her keys after Bob moves them to the table, we need to consider the sequence of events and the logical order in which people typically interact with objects.\n\n1. **Initial Position**: Anna initially placed her keys in a drawer.\n2. **Bob's Action**: Bob"
+  }
+ },
+ "EleutherAI/pythia-160m": {
+  "arith": {
+   "prompt": "Question: Tom has 3 apples and buys 4 more, then gives 2 away. How many apples does he have? Let's think step by step.\nAnswer:",
+   "continuation": "\n\nTom has 3 apples and buys 4 more, then gives 2 away. How many apples does he have? Let's think step by step.\nAnswer:\n\nTom has 3 apples and buys 4 more, then gives 2 away. How many apples does he have? Let's think step by step."
+  },
+  "logic": {
+   "prompt": "All birds can fly. A penguin is a bird. Does a penguin fly according to these premises? Reason step by step.\nAnswer:",
+   "continuation": " Yes.\n\nA:\n\nThe answer is yes.\n\nA:\n\nThe answer is no.\n\nA:\n\nThe answer is yes.\n\nA:\n\nThe answer is no.\n\nA:\n\nThe answer is yes.\n\nA:\n\nThe answer is"
+  },
+  "seq": {
+   "prompt": "Continue the pattern and explain: 2, 4, 6, 8, ... The next number is",
+   "continuation": " the number of times the pattern is repeated.\n\nA:\n\nYou can use the following code:\n\n$pattern = '2,4,6,8,10,12,14,16,18,20,22,24,28,30,32,34,36,38,40,42,44,46,48,50,52"
+  },
+  "story": {
+   "prompt": "Anna put her keys in the drawer, then went to the garden. Bob moved the keys to the table. Where will Anna look for her keys first? Think carefully.\nAnswer:",
+   "continuation": "\n\n\"I'm going to get the keys.\"\n\n\"Yes, I know.\"\n\n\"I'll get them.\"\n\n\"Yes, I'll get them.\"\n\n\"Yes, I'll get them.\"\n\n\"Yes, I'll get them.\"\n\n"
+  }
+ },
+ "HuggingFaceTB/SmolLM2-360M": {
+  "arith": {
+   "prompt": "Question: Tom has 3 apples and buys 4 more, then gives 2 away. How many apples does he have? Let's think step by step.\nAnswer:",
+   "continuation": " Tom has 3 apples and buys 4 more, then gives 2 away.\n\nStep 1:\n\nLet's think about the problem.\n\nStep 2:\n\nLet's think about the problem.\n\nStep 3:\n\nLet's think about the"
+  },
+  "logic": {
+   "prompt": "All birds can fly. A penguin is a bird. Does a penguin fly according to these premises? Reason step by step.\nAnswer:",
+   "continuation": " No.\n\nQuestion 10:\n\nA man is standing on a bridge. He sees a boat moving towards him. He sees that the boat is moving towards him at a speed of 10 km/hr. He also sees that the boat is moving towards him at a speed of 10 km/hr."
+  },
+  "seq": {
+   "prompt": "Continue the pattern and explain: 2, 4, 6, 8, ... The next number is",
+   "continuation": " 10.\n\n• 10 is the 3rd number in the sequence.\n\n• 10 is the 4th number in the sequence.\n\n• 10 is the 6th number in the sequence.\n\n• 10 is the 8th number in the sequence.\n\n• 1"
+  },
+  "story": {
+   "prompt": "Anna put her keys in the drawer, then went to the garden. Bob moved the keys to the table. Where will Anna look for her keys first? Think carefully.\nAnswer:",
+   "continuation": " Anna will look for her keys in the drawer.\n\nQuestion 2.\nWhat is the next number in the sequence? 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1"
+  }
+ }
+}
