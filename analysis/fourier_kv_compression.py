@@ -31,7 +31,8 @@ import gsm8k_band_intervention as G  # noqa: E402
 B_DEFAULT, W_DEFAULT = 16, 32
 # name -> (method, k)
 CONDS = {
-    "base": None,
+    "base": None,  # (only used for naming; the HF-generate baseline lives in gsm8k_out/gen_base.jsonl)
+    "loop_base": None,  # same decoding loop as the compressed runs, no compression (clean control)
     "dct_low_r0.5": ("low", 8),
     "dct_low_r0.25": ("low", 4),
     "dct_low_r0.125": ("low", 2),
