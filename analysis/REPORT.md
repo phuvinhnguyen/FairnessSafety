@@ -7,6 +7,7 @@ Nhánh `claude/fourier-llm-activation-analysis-977mop`. Mọi số liệu trong 
 1. Phổ Fourier của activation trên 4 prompt suy luận ngắn, 3 mô hình (Qwen2.5-0.5B-Instruct, pythia-160m, SmolLM2-360M).
 2. Phổ Fourier trên lời giải chain-of-thought dài của GSM8K (Qwen2.5-0.5B-Instruct).
 3. Can thiệp: lọc dải tần theo trục token trên activation, đo độ chính xác GSM8K, độ mạch lạc và đáp án (Qwen2.5-0.5B-Instruct, 20 bài).
+4. Nén KV-cache của phần reasoning bằng DCT (Fourier) và hai đối chứng, đo độ chính xác, độ mạch lạc và đáp án (Qwen2.5-0.5B-Instruct, 20 bài).
 
 ---
 ## Thí nghiệm 1: phổ Fourier, 4 prompt ngắn × 3 mô hình
@@ -382,7 +383,7 @@ Chú ý: baseline chỉ 25% (5/20), 70% lời giải bị cắt ở 256 token n�
 | 454 | 150 | 240 | 240 | 24 | 12 | 24 | None | None |
 
 **Nhận xét về đáp án.**
-- Can thiệp nhẹ (×0.5 ở layer giữa) giữ độ chính xác tổng 20–25% nhưng chỉ 4–5/20 đáp án trùng baseline: tập bài đúng thay đổi (bài `1010` và `98` từ đúng thành sai, bài `130` và `237` từ sai thành đúng ở `mid_low0.5`). Độ chính xác tổng không đổi chủ yếu là tình cờ; đáp án thực ra rất nhạy với nhiễu.
+- **Cảnh báo về mức nhiễu nền (đo ở thí nghiệm 4):** chạy cùng mô hình, cùng prompt, KHÔNG can thiệp, chỉ khác đường tính số (`generate` của HF so với vòng sinh tự viết) đã cho: chỉ 5/20 đáp án trùng, 0/20 văn bản trùng, tiền tố chung trung bình 28 token, độ chính xác 25% so với 30%. Vì vậy việc ở can thiệp nhẹ (×0.5) chỉ 4–5/20 đáp án trùng baseline NẰM NGANG mức nhiễu nền, không chứng minh được can thiệp nhẹ làm đổi đáp án; greedy decoding tự nó nhạy với sai khác số học rất nhỏ. Chênh lệch độ chính xác 20–25% so với 25% cũng nằm trong sai số.
 - Bỏ hẳn một dải ở layer giữa: 0/20 đúng, hầu như mọi đáp án đổi, nhiều đáp án vô lý (ví dụ bài `209`: 1.25e+06; bài `586`: 78000 thay vì 800).
 - Can thiệp ×0.5 ở mọi layer: không còn đáp án nào (19–20/20 bài không có đáp án, mô hình rơi vào vòng lặp).
 
@@ -860,20 +861,336 @@ hours              11111111      11111111111111111111111111111111111111111111111
 
 ### 3.4 Kết luận thí nghiệm 3
 - Cả hai dải đều cần cho suy luận. Bỏ hẳn một dải ở layer giữa làm NLL tăng 8–10 lần (0.16 → 1.26 khi bỏ thấp, 1.63 khi bỏ cao) và đáp án về 0/20 đúng. Bỏ dải cao hại hơn một chút (khác biệt NLL khoảng 3 sai số chuẩn, nhưng chỉ ở một layer, 20 bài).
-- Giảm nhẹ một dải ở một layer: văn bản vẫn trôi chảy (NLL 0.16 → 0.23) nhưng chuỗi lập luận và đáp án đổi nhiều.
+- Giảm nhẹ một dải ở một layer: văn bản vẫn trôi chảy (NLL 0.16 → 0.23, tăng nhẹ) và độ chính xác không phân biệt được với baseline; mức đổi đáp án không tách được khỏi nhiễu nền (xem 3.2).
 - Giảm một nửa một dải ở mọi layer: suy biến thành vòng lặp ("systemsystem…"), không có đáp án.
 - Chưa thể nói dải nào "gánh" suy luận hơn dải nào: bỏ dải nào cũng hỏng, và quy mô thí nghiệm nhỏ.
+
+---
+## Thí nghiệm 4: nén reasoning bằng Fourier (DCT trên KV-cache)
+
+**Cách làm.** Vòng sinh greedy tự viết với KV-cache (Qwen2.5-0.5B-Instruct, cùng 20 bài GSM8K, tối đa 256 token). Các token ĐÃ SINH (phần reasoning) được chia thành khối 16 token. Khi một khối cũ hơn 32 token gần nhất, K và V của khối đó (mọi layer, mọi head) được biến đổi DCT-II dọc trục token, chỉ giữ k trong 16 hệ số, rồi tái dựng ngay trong cache. Prompt (câu hỏi), token đầu và 32 token gần nhất luôn giữ nguyên. Đây là MÔ PHỎNG mất mát thông tin (cache vẫn kích thước đầy đủ); tỉ lệ nén thực sự là phần hệ số được giữ. 'Tỉ lệ cache giữ lại' bên dưới là trung bình trên các token sinh ra trong 256 token (vì 48 token đầu và cửa sổ gần nhất luôn nguyên vẹn nên cao hơn k/16). Ngoài ra: chọn k hệ số lớn nhất (cần thêm chỉ số) và đối chứng không dùng Fourier (giữ thưa).
+
+**Đối chứng đúng:** `loop_base` là cùng vòng sinh nhưng không nén. Baseline `generate` của HF không dùng được để so sánh đáp án: xem mức nhiễu nền bên dưới.
+
+| điều kiện | mô tả | tỉ lệ cache giữ lại | đúng | NLL | lặp 4-gram | kết thúc | đáp án giống loop_base | tiền tố chung với loop_base (token) |
+|---|---|---|---|---|---|---|---|---|
+| `loop_base` | Không nén (cùng vòng sinh với các điều kiện khác) | 1.00 | 6/20 | 0.09 | 0.22 | 30% | 20/20 | 241 |
+| `dct_low_r0.5` | DCT, giữ 8/16 hệ số thấp nhất | 0.57 | 5/20 | 0.22 | 0.22 | 35% | 6/20 | 90 |
+| `dct_low_r0.25` | DCT, giữ 4/16 hệ số thấp nhất | 0.37 | 2/20 | 0.33 | 0.20 | 35% | 5/20 | 78 |
+| `dct_low_r0.125` | DCT, giữ 2/16 hệ số thấp nhất | 0.27 | 3/20 | 0.39 | 0.15 | 55% | 3/20 | 80 |
+| `dct_top_r0.25` | DCT, giữ 4/16 hệ số lớn nhất (thêm 4 chỉ số) | 0.36 | 3/20 | 0.25 | 0.20 | 30% | 4/20 | 86 |
+| `decim_r0.25` | Đối chứng không Fourier: giữ 1 token mỗi 4, lặp lại | 0.35 | 0/20 | 0.43 | 0.21 | 15% | 2/20 | 72 |
+
+**Mức nhiễu nền (không nén gì cả):** baseline `generate` của HF so với `loop_base` (cùng mô hình, chỉ khác đường tính số): 5/20 đáp án trùng, 0/20 văn bản trùng, tiền tố chung trung bình 28 token, độ chính xác 5/20 so với 6/20. Do đó số 'đáp án giống' ở bảng trên (2–6/20) KHÔNG tách được khỏi nhiễu nền; chỉ NLL và độ chính xác ở mức nén mạnh là tín hiệu đáng tin hơn, và 'tiền tố chung' cho biết lúc nén bắt đầu làm lệch văn bản (cả 20 bài đều trùng ít nhất 48 token, đúng lúc nén bắt đầu có tác dụng).
+
+### 4.1 Đáp án từng bài (✓ = đúng)
+
+| bài (idx) | đáp án đúng | `loop_base` | `dct_low_r0.5` | `dct_low_r0.25` | `dct_low_r0.125` | `dct_top_r0.25` | `decim_r0.25` |
+|---|---|---|---|---|---|---|---|
+| 264 | 400 | 400 ✓ | 400 ✓ | 3 | 200 | 225 | 250 |
+| 725 | 25 | 9 | 2 | 20 | 3 | 3 | 9 |
+| 996 | 3 | 4 | 13 | 4 | 20 | 3 ✓ | 16 |
+| 586 | 800 | 200 | 200 | 1600 | 1600 | 1600 | 300 |
+| 1010 | 5 | 4 | 2 | 3 | 2 | 4 | 11 |
+| 12 | 13 | 5 | 2 | 1.5 | 9 | 2 | 70 |
+| 904 | 8 | 8 ✓ | 8 ✓ | 24 | 72 | 8 ✓ | 10.43 |
+| 130 | 30 | 30 ✓ | 30 ✓ | 30 ✓ | 30 ✓ | 20 | 2 |
+| 209 | 145 | 4 | 2400 | 4 | 1200 | 1800 | 12 |
+| 244 | 20 | 27 | -3 | 24 | 8 | 23 | 27 |
+| 237 | 90 | 90 ✓ | 120 | 90 ✓ | 90 ✓ | 90 ✓ | 1 |
+| 689 | 7 | 1 | 10 | 1 | 0 | 10 | 10 |
+| 601 | 104 | 60 | 24 | 4 | 1 | 59 | 23 |
+| 98 | 5 | 5 ✓ | 15 | 25 | 25 | 25 | 20 |
+| 1284 | 25 | 6 | 5 | 12 | 10 | 0 | 2 |
+| 1131 | 96 | 1.2 | 96 ✓ | 24 | 76.8 | 5 | 4.8 |
+| 1272 | 296 | 310 | 3 | 56 | 80 | 2 | 136 |
+| 482 | 26 | 26 ✓ | 26 ✓ | 0 | 26 ✓ | 27 | 86 |
+| 992 | 52 | 48 | 3 | 1 | 7 | 4 | 4 |
+| 454 | 150 | 240 | 240 | 120 | 120 | 240 | 24 |
+
+### 4.2 Ví dụ chạy chi tiết
+
+#### Bài 904: không nén đúng; nén nhẹ (8/16) vẫn đúng
+
+**Câu hỏi:** There are 9 Fast and the Furious movies, Deepa has seen each one in the theatre three times. She has spent $216 seeing these movies. What is the average price she paid per ticket?
+
+**Đáp án đúng:** 8
+
+**`loop_base`** (Không nén (cùng vòng sinh với các điều kiện khác)): đáp án = **8** ✓; 188 token; tiền tố chung với loop_base = 188 token
+
+~~~~
+To find the average price per ticket, we need to follow these steps:
+
+1. Determine the total number of tickets seen.
+2. Divide the total amount spent by the total number of tickets.
+
+First, we know that Deepa has seen each of the 9 Fast and the Furious movies three times. Therefore, the total number of tickets seen is:
+\[ 9 \text{ movies} \times 3 \text{ times/movie} = 27 \text{ tickets} \]
+
+Next, we know that the total amount spent is $216. To find the average price per ticket, we divide the total amount spent by the total number of tickets:
+\[ \frac{216 \text{ dollars}}{27 \text{ tickets}} = 8 \text{ dollars/ticket} \]
+
+So, the average price she paid per ticket is:
+\[ \boxed{8} \]
+~~~~
+
+**`dct_low_r0.5`** (DCT, giữ 8/16 hệ số thấp nhất): đáp án = **8** ✓; 201 token; tiền tố chung với loop_base = 68 token
+
+~~~~
+To find the average price per ticket, we need to follow these steps:
+
+1. Determine the total number of tickets seen.
+2. Divide the total amount spent by the total number of tickets.
+
+First, we know that Deepa has seen each of the 9 Fast and the Furious movies three times. Therefore, the total number of tickets she has seen is:
+\[ 9 \text{ movies} \times 3 \text{ times/movie} = 27 \text{ tickets} \]
+
+Next, we know that she has spent $216 in total. To find the average price per ticket, we divide the total amount spent by the total number of tickets:
+\[ \text{Average price per ticket} = \frac{216}{27} \]
+
+Now, we perform the division:
+\[ \frac{216}{27} = 8 \]
+
+So, the average price she paid per ticket is \(\boxed{8}\).
+~~~~
+
+**`dct_low_r0.25`** (DCT, giữ 4/16 hệ số thấp nhất): đáp án = **24** ✗; 201 token; tiền tố chung với loop_base = 67 token
+
+~~~~
+To find the average price per ticket, we need to follow these steps:
+
+1. Determine the total number of tickets seen.
+2. Divide the total amount spent by the total number of tickets.
+
+First, we know that Deepa has seen each of the 9 Fast and the Furious movies three times. Therefore, the total number of times she has seen the movies is:
+\[ 9 \times 3 = 27 \text{ times} \]
+
+Next, we know that she has spent $216 seeing these movies. To find the average price per ticket, we divide the total amount spent by the number of times she saw the movies. So, we calculate:
+
+\[
+\text{Average price per ticket} = \frac{\text{Total amount spent}}{\text{Number of movies}} = \frac{216}{9} = 24
+\]
+
+So, the average price she paid per ticket is \(\boxed{24}\).
+~~~~
+
+**`dct_low_r0.125`** (DCT, giữ 2/16 hệ số thấp nhất): đáp án = **72** ✗; 191 token; tiền tố chung với loop_base = 67 token
+
+~~~~
+To find the average price per ticket, we need to follow these steps:
+
+1. Determine the total number of tickets seen.
+2. Divide the total amount spent by the total number of tickets.
+
+First, we know that Deepa has seen each of the 9 Fast and the Furious movies three times. Therefore, the total number of times she has seen the movies is:
+\[ 9 \times 3 = 27 \text{ times} \]
+
+She has spent a total of $216 seeing these movies. To find the average price per ticket, we divide the total amount spent by the number of times she saw the movies:
+
+\[
+\text{Average price per ticket} = \frac{\text{Total amount spent}}{\text{Number of times seen}} = \frac{216}{3} = 72
+\]
+
+So, the average price she paid per ticket is $72.
+~~~~
+
+**`dct_top_r0.25`** (DCT, giữ 4/16 hệ số lớn nhất (thêm 4 chỉ số)): đáp án = **8** ✓; 199 token; tiền tố chung với loop_base = 68 token
+
+~~~~
+To find the average price per ticket, we need to follow these steps:
+
+1. Determine the total number of tickets seen.
+2. Divide the total amount spent by the total number of tickets.
+
+First, we know that Deepa has seen each of the 9 Fast and the Furious movies three times. Therefore, the total number of tickets she has seen is:
+\[ 9 \text{ movies} \times 3 \text{ times/movie} = 27 \text{ tickets} \]
+
+Next, we know that she has spent $216 in total. To find the average price per ticket, we divide the total amount spent by the number of tickets:
+
+\[
+\text{Average price per ticket} = \frac{\text{Total amount spent}}{\text{Number of tickets}} = \frac{216}{27} = 8
+\]
+
+So, the average price she paid per ticket is \(\boxed{8}\).
+~~~~
+
+**`decim_r0.25`** (Đối chứng không Fourier: giữ 1 token mỗi 4, lặp lại): đáp án = **10.43** ✗; 216 token; tiền tố chung với loop_base = 58 token
+
+~~~~
+To find the average price per ticket, we need to follow these steps:
+
+1. Determine the total number of tickets seen.
+2. Divide the total amount spent by the total number of tickets.
+
+First, we know that Deepa has seen each of the 9 Fast and the Furious movies in the theatre three times. Therefore, the total number of times she has seen the movies is:
+\[ 9 \text{ movies} \times 3 \text{ times/movie} = 27 \text{ times} \]
+
+Next, we know that she has spent $216 seeing these movies. To find the average price per ticket, we divide the total amount spent by the number of times she has seen the movies:
+\[
+\text{Average price per ticket} = \frac{216 \text{ dollars}}{21 \text{ times}} = 10.43 \text{ dollars per ticket}
+\]
+So, the average price she paid per ticket is \(\boxed{10.43}\).
+~~~~
+
+#### Bài 586: không nén sai; xem nén làm lời giải đổi thế nào
+
+**Câu hỏi:** Hannah needs to drink 100 ml of water for every 200 calories she burns. She spends 2 hours doing aerobics, which burns 500 calories/hour, and 1 hour running, which burns 600 calories/hour. How many ml of water does she need to drink?
+
+**Đáp án đúng:** 800
+
+**`loop_base`** (Không nén (cùng vòng sinh với các điều kiện khác)): đáp án = **200** ✗; 256 token; tiền tố chung với loop_base = 256 token
+
+~~~~
+To determine how many milliliters of water Hannah needs to drink, we need to follow these steps:
+
+1. Calculate the total calories burned from aerobics.
+2. Calculate the total calories burned from running.
+3. Determine the total calories burned.
+4. Calculate the amount of water needed based on the calories burned.
+
+First, let's calculate the calories burned from aerobics:
+\[ \text{Calories burned from aerobics} = 2 \text{ hours} \times 500 \text{ calories/hour} = 1000 \text{ calories} \]
+
+Next, let's calculate the c
+[...]
+600 \text{ calories/hour} = 600 \text{ calories} \]
+
+Now, let's find the total calories burned:
+\[ \text{Total calories burned} = 1000 \text{ calories} + 600 \text{ calories} = 1600 \text{ calories} \]
+
+According to the problem, Hannah needs to drink 100 ml of water for every 200 calories burned. So
+~~~~
+
+**`dct_low_r0.5`** (DCT, giữ 8/16 hệ số thấp nhất): đáp án = **200** ✗; 256 token; tiền tố chung với loop_base = 62 token
+
+~~~~
+To determine how many milliliters of water Hannah needs to drink, we need to follow these steps:
+
+1. Calculate the total calories burned from aerobics.
+2. Calculate the total calories burned from running.
+3. Determine the total calories burned.
+4. Calculate the amount of water needed based on the total calories burned.
+
+First, let's calculate the calories burned from aerobics:
+\[ \text{Calories burned from aerobics} = 2 \text{ hours} \times 500 \text{ calories/hour} = 1000 \text{ calories} \]
+
+Next, let's calculate
+[...]
+= 600 \text{ calories} \]
+
+Now, we add the calories burned from both activities to find the total calories burned:
+\[ \text{Total calories burned} = 100 \text{ ml} + 100 \text{ ml} = 200 \text{ ml} \]
+
+Now, we need to determine how much water Hannah needs to drink based on the calories burned. Since
+~~~~
+
+**`dct_low_r0.25`** (DCT, giữ 4/16 hệ số thấp nhất): đáp án = **1600** ✗; 256 token; tiền tố chung với loop_base = 74 token
+
+~~~~
+To determine how many milliliters of water Hannah needs to drink, we need to follow these steps:
+
+1. Calculate the total calories burned from aerobics.
+2. Calculate the total calories burned from running.
+3. Determine the total calories burned.
+4. Calculate the amount of water needed based on the calories burned.
+
+First, let's calculate the calories burned from running:
+\[ \text{Calories burned from running} = 1 \text{ hour} \times 600 \text{ calories/hour} = 600 \text{ calories}
+\]
+
+Next, we calculate the total ca
+[...]
+burned from running} = 2 \text{ hours} \times 500 \text{ calories/hour} + 1 \text{ hour} \times 600 \text{ calories/hour} = 1000 \text{ calories} + 600 \text{ calories} = 1600 \text{ calories}
+\]
+
+Next, we calculate the amount of water needed based on the calories burned. Since Hannah needs to drink
+~~~~
+
+**`dct_low_r0.125`** (DCT, giữ 2/16 hệ số thấp nhất): đáp án = **1600** ✗; 256 token; tiền tố chung với loop_base = 74 token
+
+~~~~
+To determine how many milliliters of water Hannah needs to drink, we need to follow these steps:
+
+1. Calculate the total calories burned from aerobics.
+2. Calculate the total calories burned from running.
+3. Determine the total calories burned.
+4. Calculate the amount of water needed based on the calories burned.
+
+First, let's calculate the calories burned from running:
+\[ \text{Calories burned from running} = 1 \text{ hour} \times 600 \text{ calories/hour} = 600 \text{ calories}
+Next, we calculate the calories bur
+[...]
+ 2 \text{ hours} \times 500 \text{ calories/hour} = 1000 \text{ calories}
+\]
+Next, we calculate the total calories burned:
+\[
+\text{Total calories burned} = \text{calories burned while aerobics} + \text{calories burned while running} = 2 \times 500 + 1 \times 600 = 1000 + 600 = 1600 \text{ calories}
+~~~~
+
+**`dct_top_r0.25`** (DCT, giữ 4/16 hệ số lớn nhất (thêm 4 chỉ số)): đáp án = **1600** ✗; 256 token; tiền tố chung với loop_base = 126 token
+
+~~~~
+To determine how many milliliters of water Hannah needs to drink, we need to follow these steps:
+
+1. Calculate the total calories burned from aerobics.
+2. Calculate the total calories burned from running.
+3. Determine the total calories burned.
+4. Calculate the amount of water needed based on the calories burned.
+
+First, let's calculate the calories burned from aerobics:
+\[ \text{Calories burned from aerobics} = 2 \text{ hours} \times 500 \text{ calories/hour} = 1000 \text{ calories} \]
+
+Next, we calculate the calo
+[...]
+ned from running} = 1 \text{ hour} \times 600 \text{ calories/hour} = 600 \text{ calories} \]
+
+Next, we calculate the total calories burned:
+\[ \text{Total calories burned} = 2 \text{ hours} \times 500 \text{ calories/hour} + 1 \text{ hour} \times 600 \text{ calories/hour} = 1000 + 600 = 1600 \text{
+~~~~
+
+**`decim_r0.25`** (Đối chứng không Fourier: giữ 1 token mỗi 4, lặp lại): đáp án = **300** ✗; 256 token; tiền tố chung với loop_base = 62 token
+
+~~~~
+To determine how many milliliters of water Hannah needs to drink, we need to follow these steps:
+
+1. Calculate the total calories burned from aerobics.
+2. Calculate the total calories burned from running.
+3. Determine the total calories burned.
+4. Calculate the amount of water needed based on the total calories burned.
+
+Let's start with the first step:
+
+1. Calculate the calories burned from aerobics:
+   \[
+   \text{Calories from aerobics} = 2 \text{ hours} \times 500 \text{ calories/hour} = 1000 \text{ calories}
+  
+[...]
+xt{ hour} \times 600 \text{ calories/hour} = 600 \text{ calories}
+\]
+
+Next, calculate the total calories burned from both activities:
+\[
+\text{Total calories burned} = \text{Calories burned from aerobics} + \text{Calories burned from running} = 200 \text{ calories} + 100 \text{ calories} = 300 \text
+~~~~
+
+### 4.3 Kết luận thí nghiệm 4
+- Nén 2× (giữ 8/16 hệ số thấp) gần như không phá được độ chính xác (5/20 so với 6/20 không nén) nhưng NLL tăng 0.09 → 0.22.
+- Nén mạnh hơn (4×–8×) làm NLL tăng rõ (0.33–0.39) và độ chính xác tụt (2–3/20); chênh lệch độ chính xác giữa các mức k không đơn điệu và nằm trong sai số (n=20), nên không nên đọc kỹ.
+- Cùng mức giữ lại ≈0.35: DCT low-pass tốt hơn lấy mẫu thưa (NLL 0.33 so với 0.43; đúng 2/20 so với 0/20); chọn hệ số lớn nhất tốt hơn low-pass ở cùng k (NLL 0.25 so với 0.33), nhưng nếu tính cả chỉ số cần lưu thì chi phí tương đương giữ 8 hệ số, khi đó low-pass k=8 (NLL 0.22) không kém.
+- Hợp với kết quả phổ ở thí nghiệm 2: activation gần như 'phẳng' về tần số nên ít dư thừa để nén; Fourier không cho nén lớn mà không mất chất lượng.
+- Hạn chế riêng: K đã gắn RoPE nên low-pass dọc trục token không phải cách lý tưởng (nên thử nén K trước RoPE); chỉ n=20, một mô hình, B=16, W=32; mô phỏng chứ chưa tiết kiệm bộ nhớ thật.
 
 ---
 ## Hạn chế chung
 - Thí nghiệm 3 chỉ dùng Qwen2.5-0.5B-Instruct, 20 bài, một layer giữa, điểm cắt dải do tôi chọn (EMA 0.5 và 0.9), giới hạn 256 token.
 - Thí nghiệm 1: văn bản sinh ra trong mục 1 được sinh lại bằng greedy với cùng cài đặt để lưu lại (kết quả phổ đã tính từ lần chạy trước, cùng prompt).
-- Chỉ 4 prompt trong thí nghiệm 1 và 20 bài trong thí nghiệm 2/3, nên chưa đủ để kết luận thống kê chắc chắn.
+- Chỉ 4 prompt trong thí nghiệm 1 và 20 bài trong thí nghiệm 2/3/4, nên chưa đủ để kết luận thống kê chắc chắn.
 
 ## Tái chạy
 ```
 python analysis/fourier_activation_analysis.py
 python analysis/gsm8k_band_intervention.py gen   # rồi: score
 python analysis/fourier_gsm8k_spectrum.py
+python analysis/fourier_kv_compression.py gen   # rồi: score
 python analysis/build_report.py
 ```

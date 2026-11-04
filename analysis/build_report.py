@@ -50,7 +50,8 @@ def main():
       "trong `analysis/` bằng `analysis/build_report.py`.\n")
     w("**Ba thí nghiệm**\n\n1. Phổ Fourier của activation trên 4 prompt suy luận ngắn, 3 mô hình (Qwen2.5-0.5B-Instruct, pythia-160m, SmolLM2-360M).\n"
       "2. Phổ Fourier trên lời giải chain-of-thought dài của GSM8K (Qwen2.5-0.5B-Instruct).\n"
-      "3. Can thiệp: lọc dải tần theo trục token trên activation, đo độ chính xác GSM8K, độ mạch lạc và đáp án (Qwen2.5-0.5B-Instruct, 20 bài).\n")
+      "3. Can thiệp: lọc dải tần theo trục token trên activation, đo độ chính xác GSM8K, độ mạch lạc và đáp án (Qwen2.5-0.5B-Instruct, 20 bài).\n"
+      "4. Nén KV-cache của phần reasoning bằng DCT (Fourier) và hai đối chứng, đo độ chính xác, độ mạch lạc và đáp án (Qwen2.5-0.5B-Instruct, 20 bài).\n")
 
     # ------------------------------------------------------------ exp 1
     w("---\n## Thí nghiệm 1: phổ Fourier, 4 prompt ngắn × 3 mô hình\n")
@@ -122,9 +123,11 @@ def main():
         rows.append([i, fmt(R["base"][i]["gold"])] + [fmt(R[c][i]["pred"]) + (" ✓" if ok(R[c][i]) else "") for c in C])
     w(table(rows, ["bài (idx)", "đáp án đúng"] + [f"`{c}`" for c in C]))
     w("\n**Nhận xét về đáp án.**\n"
-      "- Can thiệp nhẹ (×0.5 ở layer giữa) giữ độ chính xác tổng 20–25% nhưng chỉ 4–5/20 đáp án trùng baseline: tập bài đúng thay đổi "
-      "(bài `1010` và `98` từ đúng thành sai, bài `130` và `237` từ sai thành đúng ở `mid_low0.5`). Độ chính xác tổng không đổi chủ yếu là tình cờ; "
-      "đáp án thực ra rất nhạy với nhiễu.\n"
+      "- **Cảnh báo về mức nhiễu nền (đo ở thí nghiệm 4):** chạy cùng mô hình, cùng prompt, KHÔNG can thiệp, chỉ khác đường tính số "
+      "(`generate` của HF so với vòng sinh tự viết) đã cho: chỉ 5/20 đáp án trùng, 0/20 văn bản trùng, tiền tố chung trung bình 28 token, "
+      "độ chính xác 25% so với 30%. Vì vậy việc ở can thiệp nhẹ (×0.5) chỉ 4–5/20 đáp án trùng baseline NẰM NGANG mức nhiễu nền, "
+      "không chứng minh được can thiệp nhẹ làm đổi đáp án; greedy decoding tự nó nhạy với sai khác số học rất nhỏ. "
+      "Chênh lệch độ chính xác 20–25% so với 25% cũng nằm trong sai số.\n"
       "- Bỏ hẳn một dải ở layer giữa: 0/20 đúng, hầu như mọi đáp án đổi, nhiều đáp án vô lý (ví dụ bài `209`: 1.25e+06; bài `586`: 78000 thay vì 800).\n"
       "- Can thiệp ×0.5 ở mọi layer: không còn đáp án nào (19–20/20 bài không có đáp án, mô hình rơi vào vòng lặp).\n")
 
@@ -143,17 +146,76 @@ def main():
     w("### 3.4 Kết luận thí nghiệm 3\n"
       "- Cả hai dải đều cần cho suy luận. Bỏ hẳn một dải ở layer giữa làm NLL tăng 8–10 lần (0.16 → 1.26 khi bỏ thấp, 1.63 khi bỏ cao) và đáp án về 0/20 đúng. "
       "Bỏ dải cao hại hơn một chút (khác biệt NLL khoảng 3 sai số chuẩn, nhưng chỉ ở một layer, 20 bài).\n"
-      "- Giảm nhẹ một dải ở một layer: văn bản vẫn trôi chảy (NLL 0.16 → 0.23) nhưng chuỗi lập luận và đáp án đổi nhiều.\n"
+      "- Giảm nhẹ một dải ở một layer: văn bản vẫn trôi chảy (NLL 0.16 → 0.23, tăng nhẹ) và độ chính xác không phân biệt được với baseline; mức đổi đáp án không tách được khỏi nhiễu nền (xem 3.2).\n"
       "- Giảm một nửa một dải ở mọi layer: suy biến thành vòng lặp (\"systemsystem…\"), không có đáp án.\n"
       "- Chưa thể nói dải nào \"gánh\" suy luận hơn dải nào: bỏ dải nào cũng hỏng, và quy mô thí nghiệm nhỏ.\n")
 
+
+    # ------------------------------------------------------------ exp 4
+    K = A / "kv_out"
+    KC = ["loop_base", "dct_low_r0.5", "dct_low_r0.25", "dct_low_r0.125", "dct_top_r0.25", "decim_r0.25"]
+    KD = {"loop_base": "Không nén (cùng vòng sinh với các điều kiện khác)",
+          "dct_low_r0.5": "DCT, giữ 8/16 hệ số thấp nhất", "dct_low_r0.25": "DCT, giữ 4/16 hệ số thấp nhất",
+          "dct_low_r0.125": "DCT, giữ 2/16 hệ số thấp nhất", "dct_top_r0.25": "DCT, giữ 4/16 hệ số lớn nhất (thêm 4 chỉ số)",
+          "decim_r0.25": "Đối chứng không Fourier: giữ 1 token mỗi 4, lặp lại"}
+    KS = json.loads((K / "scores.json").read_text())
+    KR = {c: {json.loads(l)["idx"]: json.loads(l) for l in open(K / f"gen_{c}.jsonl")} for c in KC}
+    HFB = R["base"]
+    kb = KR["loop_base"]
+    prefix = lambda a, b: next((n for n, (x, y) in enumerate(zip(a, b)) if x != y), min(len(a), len(b)))
+    w("---\n## Thí nghiệm 4: nén reasoning bằng Fourier (DCT trên KV-cache)\n")
+    w("**Cách làm.** Vòng sinh greedy tự viết với KV-cache (Qwen2.5-0.5B-Instruct, cùng 20 bài GSM8K, tối đa 256 token). "
+      "Các token ĐÃ SINH (phần reasoning) được chia thành khối 16 token. Khi một khối cũ hơn 32 token gần nhất, K và V của khối đó (mọi layer, mọi head) "
+      "được biến đổi DCT-II dọc trục token, chỉ giữ k trong 16 hệ số, rồi tái dựng ngay trong cache. Prompt (câu hỏi), token đầu và 32 token gần nhất "
+      "luôn giữ nguyên. Đây là MÔ PHỎNG mất mát thông tin (cache vẫn kích thước đầy đủ); tỉ lệ nén thực sự là phần hệ số được giữ. "
+      "'Tỉ lệ cache giữ lại' bên dưới là trung bình trên các token sinh ra trong 256 token (vì 48 token đầu và cửa sổ gần nhất luôn nguyên vẹn nên cao hơn k/16). "
+      "Ngoài ra: chọn k hệ số lớn nhất (cần thêm chỉ số) và đối chứng không dùng Fourier (giữ thưa).\n")
+    w("**Đối chứng đúng:** `loop_base` là cùng vòng sinh nhưng không nén. Baseline `generate` của HF không dùng được để so sánh đáp án: "
+      "xem mức nhiễu nền bên dưới.\n")
+    rows = []
+    for c in KC:
+        s_ = KS[c]; kf = sum(r.get("kept_fraction", 1.0) for r in KR[c].values()) / 20
+        pr = [prefix(KR[c][i]["gen_ids"], kb[i]["gen_ids"]) for i in kb]
+        rows.append([f"`{c}`", KD[c], f"{kf:.2f}", f"{round(s_['acc']*20)}/20", f"{s_['nll_under_base']:.2f}", f"{s_['rep4']:.2f}",
+                     f"{s_['finished']*100:.0f}%", f"{sum(KR[c][i]['pred'] == kb[i]['pred'] for i in kb)}/20", f"{sum(pr)/20:.0f}"])
+    w(table(rows, ["điều kiện", "mô tả", "tỉ lệ cache giữ lại", "đúng", "NLL", "lặp 4-gram", "kết thúc", "đáp án giống loop_base",
+                   "tiền tố chung với loop_base (token)"]))
+    nf_same = sum(HFB[i]["pred"] == kb[i]["pred"] for i in kb)
+    nf_id = sum(HFB[i]["gen_ids"] == kb[i]["gen_ids"] for i in kb)
+    nf_pre = sum(prefix(HFB[i]["gen_ids"], kb[i]["gen_ids"]) for i in kb) / 20
+    w(f"\n**Mức nhiễu nền (không nén gì cả):** baseline `generate` của HF so với `loop_base` (cùng mô hình, chỉ khác đường tính số): "
+      f"{nf_same}/20 đáp án trùng, {nf_id}/20 văn bản trùng, tiền tố chung trung bình {nf_pre:.0f} token, độ chính xác "
+      f"{round(SC['base']['acc']*20)}/20 so với {round(KS['loop_base']['acc']*20)}/20. Do đó số 'đáp án giống' ở bảng trên (2–6/20) KHÔNG tách được khỏi nhiễu nền; "
+      "chỉ NLL và độ chính xác ở mức nén mạnh là tín hiệu đáng tin hơn, và 'tiền tố chung' cho biết lúc nén bắt đầu làm lệch văn bản "
+      "(cả 20 bài đều trùng ít nhất 48 token, đúng lúc nén bắt đầu có tác dụng).\n")
+    w("### 4.1 Đáp án từng bài (✓ = đúng)\n")
+    rows = []
+    for i in kb:
+        rows.append([i, fmt(kb[i]["gold"])] + [fmt(KR[c][i]["pred"]) + (" ✓" if ok(KR[c][i]) else "") for c in KC])
+    w(table(rows, ["bài (idx)", "đáp án đúng"] + [f"`{c}`" for c in KC]))
+    w("\n### 4.2 Ví dụ chạy chi tiết\n")
+    for idx, note in [(904, "không nén đúng; nén nhẹ (8/16) vẫn đúng"), (586, "không nén sai; xem nén làm lời giải đổi thế nào")]:
+        w(f"#### Bài {idx}: {note}\n\n**Câu hỏi:** {Q[idx]}\n\n**Đáp án đúng:** {fmt(kb[idx]['gold'])}\n")
+        for c in KC:
+            r = KR[c][idx]
+            w(f"**`{c}`** ({KD[c]}): đáp án = **{fmt(r['pred'])}** {'✓' if ok(r) else '✗'}; {len(r['gen_ids'])} token; "
+              f"tiền tố chung với loop_base = {prefix(r['gen_ids'], kb[idx]['gen_ids'])} token\n\n~~~~\n{clip(r['text'], 520, 300)}\n~~~~\n")
+    w("### 4.3 Kết luận thí nghiệm 4\n"
+      "- Nén 2× (giữ 8/16 hệ số thấp) gần như không phá được độ chính xác (5/20 so với 6/20 không nén) nhưng NLL tăng 0.09 → 0.22.\n"
+      "- Nén mạnh hơn (4×–8×) làm NLL tăng rõ (0.33–0.39) và độ chính xác tụt (2–3/20); chênh lệch độ chính xác giữa các mức k không đơn điệu "
+      "và nằm trong sai số (n=20), nên không nên đọc kỹ.\n"
+      "- Cùng mức giữ lại ≈0.35: DCT low-pass tốt hơn lấy mẫu thưa (NLL 0.33 so với 0.43; đúng 2/20 so với 0/20); chọn hệ số lớn nhất tốt hơn low-pass "
+      "ở cùng k (NLL 0.25 so với 0.33), nhưng nếu tính cả chỉ số cần lưu thì chi phí tương đương giữ 8 hệ số, khi đó low-pass k=8 (NLL 0.22) không kém.\n"
+      "- Hợp với kết quả phổ ở thí nghiệm 2: activation gần như 'phẳng' về tần số nên ít dư thừa để nén; Fourier không cho nén lớn mà không mất chất lượng.\n"
+      "- Hạn chế riêng: K đã gắn RoPE nên low-pass dọc trục token không phải cách lý tưởng (nên thử nén K trước RoPE); chỉ n=20, một mô hình, "
+      "B=16, W=32; mô phỏng chứ chưa tiết kiệm bộ nhớ thật.\n")
     w("---\n## Hạn chế chung\n"
       "- Thí nghiệm 3 chỉ dùng Qwen2.5-0.5B-Instruct, 20 bài, một layer giữa, điểm cắt dải do tôi chọn (EMA 0.5 và 0.9), giới hạn 256 token.\n"
       "- Thí nghiệm 1: văn bản sinh ra trong mục 1 được sinh lại bằng greedy với cùng cài đặt để lưu lại (kết quả phổ đã tính từ lần chạy trước, cùng prompt).\n"
-      "- Chỉ 4 prompt trong thí nghiệm 1 và 20 bài trong thí nghiệm 2/3, nên chưa đủ để kết luận thống kê chắc chắn.\n\n"
+      "- Chỉ 4 prompt trong thí nghiệm 1 và 20 bài trong thí nghiệm 2/3/4, nên chưa đủ để kết luận thống kê chắc chắn.\n\n"
       "## Tái chạy\n```\npython analysis/fourier_activation_analysis.py\n"
       "python analysis/gsm8k_band_intervention.py gen   # rồi: score\n"
-      "python analysis/fourier_gsm8k_spectrum.py\npython analysis/build_report.py\n```\n")
+      "python analysis/fourier_gsm8k_spectrum.py\npython analysis/fourier_kv_compression.py gen   # rồi: score\npython analysis/build_report.py\n```\n")
     (A / "REPORT.md").write_text("\n".join(L))
     print("written", (A / "REPORT.md"), sum(map(len, L)), "chars")
 
