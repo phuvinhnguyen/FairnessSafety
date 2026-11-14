@@ -7,3 +7,5 @@ outputs/
 slurm-*.out
 analysis/.cache/
 analysis/figures/
+uq_dllm/out/
+__pycache__/
